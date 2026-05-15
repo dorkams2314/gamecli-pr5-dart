@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
-import '../data/game_portal_database.dart';
-import '../domain/game.dart';
-import '../domain/game_platform.dart';
-import '../domain/platform.dart';
-import '../domain/portal_user.dart';
+import '../data/database.dart';
+import '../domain/models/game.dart';
+import '../domain/models/game_platform.dart';
+import '../domain/models/platform.dart';
+import '../domain/models/portal_user.dart';
+import 'input_helper.dart';
 
 void runMenu(GamePortalDatabase db) {
   while (true) {
@@ -75,7 +76,7 @@ void runMenu(GamePortalDatabase db) {
 }
 
 void _printUsers(GamePortalDatabase db) {
-  final users = db.getAllUsers();
+  final users = db.users.getAll();
   if (users.isEmpty) {
     stdout.writeln('пользователей пока нет');
     return;
@@ -88,15 +89,15 @@ void _printUsers(GamePortalDatabase db) {
 }
 
 void _printGames(GamePortalDatabase db) {
-  final games = db.getAllGames();
+  final games = db.games.getAll();
   if (games.isEmpty) {
     stdout.writeln('игр пока нет');
     return;
   }
   for (final game in games) {
-    final platforms = db
+    final platforms = db.gamePlatforms
         .getPlatformsForGame(game.id)
-        .map((p) => p.name)
+        .map((platform) => platform.name)
         .join(', ');
     stdout.writeln(
       'id: ${game.id} | ${game.title} | жанр: ${game.genre} | год: ${game.releaseYear} | владелец: ${game.ownerUserId} | платформы: $platforms',
@@ -105,7 +106,7 @@ void _printGames(GamePortalDatabase db) {
 }
 
 void _printPlatforms(GamePortalDatabase db) {
-  final platforms = db.getAllPlatforms();
+  final platforms = db.platforms.getAll();
   if (platforms.isEmpty) {
     stdout.writeln('платформ пока нет');
     return;
@@ -118,7 +119,7 @@ void _printPlatforms(GamePortalDatabase db) {
 }
 
 void _printLinks(GamePortalDatabase db) {
-  final links = db.getAllGamePlatformLinks();
+  final links = db.gamePlatforms.getAll();
   if (links.isEmpty) {
     stdout.writeln('привязок игр к платформам пока нет');
     return;
@@ -140,12 +141,12 @@ void _printAllFromDb(GamePortalDatabase db) {
 }
 
 void _addUser(GamePortalDatabase db) {
-  final id = _read('id пользователя: ');
-  final username = _read('никнейм: ');
-  final email = _read('email: ');
+  final id = readText('id пользователя: ', 'id пользователя');
+  final username = readText('никнейм: ', 'никнейм');
+  final email = readEmail('email: ');
   final registeredAt = DateTime.now().toUtc();
 
-  db.insertUser(
+  db.users.insert(
     PortalUser(
       id: id,
       username: username,
@@ -157,8 +158,8 @@ void _addUser(GamePortalDatabase db) {
 }
 
 void _deleteUser(GamePortalDatabase db) {
-  final id = _read('id пользователя для удаления: ');
-  db.deleteUser(id);
+  final id = readText('id пользователя для удаления: ', 'id пользователя');
+  db.users.delete(id);
   stdout.writeln('готово');
 }
 
@@ -166,13 +167,13 @@ void _addGame(GamePortalDatabase db) {
   stdout.writeln('вот доступные пользователи:');
   _printUsers(db);
 
-  final id = _read('id игры: ');
-  final title = _read('название: ');
-  final genre = _read('жанр: ');
-  final releaseYear = int.parse(_read('год выхода: '));
-  final ownerUserId = _read('id владельца: ');
+  final id = readText('id игры: ', 'id игры');
+  final title = readText('название: ', 'название');
+  final genre = readText('жанр: ', 'жанр');
+  final releaseYear = readPositiveInt('год выхода: ', 'год выхода');
+  final ownerUserId = readText('id владельца: ', 'id владельца');
 
-  db.insertGame(
+  db.games.insert(
     Game(
       id: id,
       title: title,
@@ -185,25 +186,25 @@ void _addGame(GamePortalDatabase db) {
 }
 
 void _deleteGame(GamePortalDatabase db) {
-  final id = _read('id игры для удаления: ');
-  db.deleteGame(id);
+  final id = readText('id игры для удаления: ', 'id игры');
+  db.games.delete(id);
   stdout.writeln('готово');
 }
 
 void _addPlatform(GamePortalDatabase db) {
-  final id = _read('id платформы: ');
-  final name = _read('название: ');
-  final manufacturer = _read('производитель: ');
+  final id = readText('id платформы: ', 'id платформы');
+  final name = readText('название: ', 'название');
+  final manufacturer = readText('производитель: ', 'производитель');
 
-  db.insertPlatform(
+  db.platforms.insert(
     GamePlatform(id: id, name: name, manufacturer: manufacturer),
   );
   stdout.writeln('платформа добавлена');
 }
 
 void _deletePlatform(GamePortalDatabase db) {
-  final id = _read('id платформы для удаления: ');
-  db.deletePlatform(id);
+  final id = readText('id платформы для удаления: ', 'id платформы');
+  db.platforms.delete(id);
   stdout.writeln('готово');
 }
 
@@ -213,26 +214,21 @@ void _linkGameToPlatform(GamePortalDatabase db) {
   stdout.writeln('вот доступные платформы:');
   _printPlatforms(db);
 
-  db.linkGameToPlatform(
+  db.gamePlatforms.insert(
     GamePlatformLink(
-      gameId: _read('id игры: '),
-      platformId: _read('id платформы: '),
+      gameId: readText('id игры: ', 'id игры'),
+      platformId: readText('id платформы: ', 'id платформы'),
     ),
   );
   stdout.writeln('привязка добавлена');
 }
 
 void _unlinkGameFromPlatform(GamePortalDatabase db) {
-  db.unlinkGameFromPlatform(
+  db.gamePlatforms.delete(
     GamePlatformLink(
-      gameId: _read('id игры: '),
-      platformId: _read('id платформы: '),
+      gameId: readText('id игры: ', 'id игры'),
+      platformId: readText('id платформы: ', 'id платформы'),
     ),
   );
   stdout.writeln('привязка удалена');
-}
-
-String _read(String label) {
-  stdout.write(label);
-  return stdin.readLineSync(encoding: utf8)?.trim() ?? '';
 }
